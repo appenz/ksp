@@ -1,14 +1,19 @@
 // Orbital Launch Control
 
 run once libguido.
+run once libtransfer.
 myinit().
 
 declare parameter apoa is 80000.
+set v_target to vv_circular(apoa).
 
 set incl to 0.
 
-clearscreen.print "Orbital Launch Control v0.1".
-print "Orbit:  " + apoa + " m, " + incl + " deg".
+clearscreen.
+
+print "Orbital Launch Control v0.1".
+print "
+Orbit:  " + apoa + " m, " + incl + " deg".
 
 set alt_s to 1000.
 
@@ -27,6 +32,8 @@ if ship:altitude < 1000 {
     } else if n = "KSS-2" {
         set elist to list(e[2]).
         print "Type: KSS-2 (single stage L)".
+    } else if n = "KSS-4" {
+        set elist to list(e[9],e[8],e[4]).
     } else if n:startswith("KSS-") {
         set elist to list(e[1],e[0]).
         print "Type: KSS Launcher (LL).".
@@ -48,6 +55,8 @@ if ship:altitude < 1000 {
         set elist to list(e[14],e[10], e[9]).
     } else if n:startswith("Sat-1") {
        set elist to list(e[5],e[4],e[3]).
+    } else if n:startswith("Sat-2") {
+       set elist to list(e[2],e[1],e[0]).    
     } else {
         print "Unknown vessel. Abort!".
     }
@@ -89,12 +98,20 @@ function eng_check {
     }
 }
 
+function u_status {
+  p_status("Rocket Launch "+mytimer(),0).
+  p_status("Alt: "+km(ship:altitude)+" / "+percent(ship:altitude,apoa),2).
+  p_status("AP:  "+km(ship:apoapsis)+" / "+percent(ship:apoapsis,apoa),3). 
+  p_status("v:   "+round(ship:velocity:orbit:mag)+" m/s  / "+percent(ship:velocity:orbit:mag,v_target),4). 
+}
+
 // Main --------------------------------------------------
 
-
+clr_status().
 
 if ship:altitude < 1000 {
 
+    p_status("Launching.",0).
     print " ". print "Launching.".
     print "3". wait 1. print "2". wait 1. print "1". wait 1.
     mytimer_s().
@@ -105,8 +122,12 @@ if ship:altitude < 1000 {
     lock steering to heading(90,90).
 
     // Initiate gravity turn
+    p_status("Ascent Phase I",0).
     print mytimer()+"climb to grav turn at "+alt_s.
-    wait until ship:altitude > alt_s.
+    until ship:altitude > alt_s {
+        u_status().
+        wait 0.1.
+    }
 
 
     // Raise orbit to 10k below apoapsis, wait until out of the athmosphere, stage if necessary
@@ -115,6 +136,7 @@ if ship:altitude < 1000 {
 }
 
 if ship:altitude < apoa*0.75 {
+    p_status("Ascent Phase II: 75% AP",0).
     print mytimer()+"raising AP to  75% of target: "+floor(apoa*0.75).
     
     until ship:altitude > 45000 {
@@ -126,6 +148,7 @@ if ship:altitude < apoa*0.75 {
         else {lock throttle to 1.0.}
 
         lock steering to heading(90,calc_angle(ship:altitude)).
+        u_status().
         wait 0.2.
     } 
 }
@@ -133,6 +156,7 @@ if ship:altitude < apoa*0.75 {
 if ship:apoapsis < apoa*0.999 {
     // Now we are out of the athmosphere and high. Raise orbit to apoapsis, stage if necessary
     print  mytimer()+"raising AP to 100% of target: "+floor(apoa).
+    p_status("Ascent Phase III: 100% AP",0).
 
     lock steering to ship:prograde.
 
@@ -143,6 +167,7 @@ if ship:apoapsis < apoa*0.999 {
         set app to ship:apoapsis/apoa.
         if app > .999 {lock throttle to 0.0.}
         else {lock throttle to 1.0.}
+        u_status().
         wait 0.1.
     } 
 

@@ -7,7 +7,7 @@ run once libcapture.
 
 parameter dst_planet.
 parameter dst_alt is -1.
-parameter fix_incl is True.
+parameter wrp is 0.
 
 set enc_step to 0.0001.
 
@@ -29,10 +29,11 @@ function get_d2 {
 
 function my_transfer {
     parameter dst.
+    parameter dst_min_pe is 100000.
+    parameter dst_max_pe is 200000.
+
     set src to ship:orbit:body.
     
-    set dst_min_pe to 100000.
-    set dst_max_pe to 200000.
 
     print "planetary transfer "+src:name+" -> "+dst:name.
     
@@ -106,7 +107,7 @@ function my_transfer {
                 // Try increasing dv to get encounter
                 print "#2 trying increasing dv.".
                 set mynode:eta to n_eta-time:seconds.
-                until (orb1:hasnextpatch and orb1:nextpatch:body = dst) OR dn_pro > n_pro*0.2 {
+                until (orb1:hasnextpatch and orb1:nextpatch:body = dst) OR dn_pro > n_pro*0.1 {
                   set dn_pro to dn_pro+n_pro*enc_step.
                   set mynode:prograde to n_pro+dn_pro.
                   set orb1 to mynode:orbit:nextpatch.
@@ -117,7 +118,7 @@ function my_transfer {
             if NOT (orb1:hasnextpatch AND orb1:nextpatch:body = dst) {
                 print "#3 trying increasing dv.".
                 set dn_pro to 0.
-                until (orb1:hasnextpatch and orb1:nextpatch:body = dst) OR dn_pro < -n_pro*0.2 {
+                until (orb1:hasnextpatch and orb1:nextpatch:body = dst) OR dn_pro < -n_pro*0.1 {
                   set dn_pro to dn_pro-n_pro*0.0001.
                   set mynode:prograde to n_pro+dn_pro.
                   set orb1 to mynode:orbit:nextpatch.
@@ -139,7 +140,9 @@ function my_transfer {
         }
        
         print "executing maneuver.".
-        exec_n(mynode).
+        myquicksave("x4a-preburn-1").
+        exec_n(mynode,3).
+        myquicksave("x4b-postburn-1").
         wait_until_in_orbit_of(Sun).
     }
     
@@ -148,7 +151,7 @@ function my_transfer {
         panic("I should be in orbit of Sun!?!").
     }
 
-    if ship:orbit:hasnextpatch AND ship:orbit:nextpatch:body <> dst {
+    if ship:orbit:hasnextpatch AND ship:orbit:nextpatch:body = dst {
       print "encounter ok.".
     } else if HASNODE {
       print "No encounter. Node found. Delete to re-try for encounter.".
@@ -217,7 +220,7 @@ function my_transfer {
             }
         }
         
-        print1s("final pe: "+round(pe/1000)+" km  pro/nor/rad : "+round(n_pro,2)+" / "+round(n_nor,2)+" / "+round(n_rad,2)+"   ["+round(step,2)+"]" ).         
+        print1s("final pe: "+km(pe)+" km  pro/nor/rad : "+round(n_pro,2)+" / "+round(n_nor,2)+" / "+round(n_rad,2)+"   ["+round(step,2)+"]" ).         
         
         if mynode:orbit:hasnextpatch AND mynode:orbit:nextpatch:body = dst {
             // We have an encounter.
@@ -230,9 +233,10 @@ function my_transfer {
 
     // Optimize the encounter, and burn.   
     optimize_pe(dst_min_pe,dst_max_pe,dst).
-    myquicksave("x4-encounter").
+    myquicksave("x4c-preburn-2").
     exec_n(nextnode).
-    
+    myquicksave("x4d-postburn-2").
+
     wait_until_in_orbit_of(dst).
     print "arrived in orbit of "+dst:name.
     myquicksave("x5-dstSOI").
@@ -244,7 +248,7 @@ myinit().
 if ship:obt:body <> dst_planet {
     my_transfer(dst_planet).
 }
-capture(dst_planet,dst_alt,fix_incl).    
+capture(dst_planet,dst_alt,wrp).    
 myexit().
 
 

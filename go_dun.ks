@@ -1,29 +1,29 @@
 // Launch from Kerbin to Duna
+run once libguido.
+
 print "Duna 1.0".
 
-KUniverse:QUICKSAVETO("x0-prelaunch").
+parameter alt is -1.
+parameter incl_change is False.
+
 if body = Kerbin {
   if ship:altitude < 65000 {
+    myquicksave("x0-prelaunch").
     run go_orb(250000).
-    lock throttle to 0.
-    wait until KUniverse:CANQUICKSAVE.
-    KUniverse:QUICKSAVETO("x1-orbit").
+    myquicksave("x1-orbit").
   }
   if ship:orbit:inclination > 0.01 {
     run incl.
   }
   if ship:apoapsis < 1000000*0.99 {
     run reorb(1000000).
-    wait until KUniverse:CANQUICKSAVE.
-    KUniverse:QUICKSAVETO("x2-pretransfer").
+    myquicksave("x2-pretransfer").
   }
-  run tr_pl(Duna).
+  run tr_pl(Duna,alt).
 } else {
   // In SOI, but not yet on a stable orbit.
   if ship:apoapsis < 0 OR ship:apoapsis > 200000 {   run tr_pl(Duna). }
 }
 
-wait until KUniverse:CANQUICKSAVE.
-KUniverse:QUICKSAVETO("x3-dstorbit").
 print "You arrived at Duna!".
 

@@ -1,8 +1,12 @@
 // burn the next maneuver node
 run once libguido.
 
+parameter wrp is 0.
+
 myinit().
-set mynode to nextnode.
-exec_n(mynode).
+until NOT hasnode {
+	set mynode to nextnode.
+	exec_n(mynode,wrp).
+}
 myexit().
 

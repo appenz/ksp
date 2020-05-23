@@ -29,6 +29,16 @@ function prec_05 {
   return False. 
 }
 
+// Mix_x_Mac
+// Make sure: Min < X < Max
+
+function min_x_max {
+  parameter x_min.
+  parameter x.
+  parameter x_max.
+  return max( min(x_max,x) , x_min).
+}
+
 // Safe staging
 
 function safe_stage {
@@ -44,11 +54,18 @@ function safe_stage {
     for e in elist {
         if e:IGNITION AND e:name = "ionEngine" {
             panels ON.
-            print "switching to ion engines, extending solar panels.".
+            print "switching to ion eng, extending solar.".
             break.
         }
             
     }
+}
+
+function clear_all_nodes {
+  until NOT hasnode { 
+    remove nextnode.
+    wait 1.
+  }
 }
 
 // Burn Maneuver Node
@@ -56,13 +73,8 @@ function safe_stage {
 
 function exec_n {
   parameter n.
-  
-  if n:deltav:mag < 1 {
-      print "Node have dv ov "+n:deltav:mag +" m/s, ignoring.".
-      REMOVE n.
-      return True.
-  }
-  
+  parameter p_warp is 0.
+    
   if ship:maxthrust = 0 {
       print "fuel exhausted. staging.".
       safe_stage().
@@ -72,10 +84,10 @@ function exec_n {
   declare local dt to n:deltav:mag/(ship:maxthrust/ship:mass).
    
   print "executing node in "+round(n:eta,1)+" s  with dv: "+round(n:deltav:mag,1).
-  print "est. time: "+round(dt,1).
+  p_status("Node dt:"+round(dt,1),7).
    
-  wait_turn(n:deltav:direction).
-   
+  wait_turn_n(n).
+  
    if n:eta - dt/2 - 15 > 0 {
       print "waiting for burn.".
       rwait(n:eta - dt/2 -15).
@@ -83,13 +95,24 @@ function exec_n {
       pwait(15).
   } else if n:eta > 0 {
       print "too close: "+round(n:eta,1)+" s".
-      lock steering to  n:deltav.
+      lock steering to n:deltav.
       pwait(n:eta).
   }
-  
-  lock steering to  n:deltav.
+
+  lock steering to n:deltav.
   declare local dv0 to n:deltav.
   
+  if dv0:mag < 0.2 {
+      print "Node have dv ov "+n:deltav:mag +" m/s, ignoring.".
+      unlock steering.
+      REMOVE n.
+      wait(10).
+      return True.
+  }
+
+  local dv_min is abs(n:deltav:mag).
+
+  if p_warp > 0 { pstart(p_warp). }
   until false {
       if ship:maxthrust = 0 {
           print "fuel exhausted. staging.".
@@ -99,51 +122,33 @@ function exec_n {
       } else {
           set_throttle(n:deltav:mag,5).
           if vdot(dv0, n:deltav) < 0 { break. }
+          if abs(n:deltav:mag) > dv_min+1 {
+              // Emergency check. This can happen for very long burns.
+              print "ABORTING BURN! deltav is growing whne burning to target!".
+              break.
+          } else {
+              set dv_min to abs(n:deltav:mag).
+          }
+
           if n:deltav:mag < 0.1
           {
+            pstop().
             wait until vdot(dv0, n:deltav) < 0.5.
             break.
           }
       }
       wait 0.1.
+      p_status("Node dA: "+round(vang(ship:facing:vector,n:deltav),2),6).
+      p_status("Node th: "+round(throttle,2),7).
   }
+  if p_warp > 0 { pstop(). }
   lock throttle to 0.
   unlock steering.
   print "done. dv: "+round(n:deltav:mag,1)+" m/s".
   wait 0.1.
   remove n.
-}
-
-// Time needed for Hohmann transfer from alt1->alt2
-
-function t_hohmann {
-  parameter alt1.
-  parameter alt2.
-  return constant:pi*( (alt1+alt2+2*body:radius)^3/(8*body:mu) )^0.5.
-}
-
-// Velocity at a specific altitude for current orbit.
-
-function vv_alt {
-  parameter r.
-  declare local gm to body:mu.
-  return (gm*(2/(r+body:radius)-1/ship:orbit:semimajoraxis))^0.5.
-}
-
-// Velocity at a specific altitude for an arbitrary orbit
-
-function vv_axis {
-  parameter r.
-  parameter axis.
-  declare local gm to body:mu.
-  return (gm*(2/(r+body:radius)-1/axis))^0.5.
-}
-
-// Velocity for a circular orbit at a given altitude AGL
-
-function vv_circular {
-  parameter r.
-  return vv_axis(r, r+body:radius).
+  p_status("",6).
+  p_status("Node: done.",7).
 }
 
 // Horizontal Vector
@@ -285,16 +290,33 @@ function timed_turn {
   kuniverse:timewarp:cancelwarp(). 
 }
 
+function wait_turn_n {
+  parameter n.
+  lock steering to n:deltav.
+  set warpmode to "physics".
+  set warp to 3.
+  until vang(ship:facing:vector,n:deltav) < 2 {
+    //print ship:facing:vector +" "+ v:vector.
+    p_status("Node dA: "+round(vang(ship:facing:vector,n:deltav),2),6).
+    wait 0.1.
+  }
+  kuniverse:timewarp:cancelwarp(). 
+  p_status("Node dA: "+round(vang(ship:facing:vector,n:deltav),2)+" done.",6).
+}
+
+
 function wait_turn {
   parameter v.
   lock steering to v.
   set warpmode to "physics".
   set warp to 3.
   until vang(ship:facing:vector,v:vector) < 2 {
+    p_status("Node dA: "+round(vang(ship:facing:vector,v:vector),2),6).
     //print ship:facing:vector +" "+ v:vector.
     wait 0.2.
   }
   kuniverse:timewarp:cancelwarp(). 
+  p_status("Node dA: "+round(vang(ship:facing:vector,v:vector),2)+" done.",6).
 }
 
 function wait_until_in_orbit_of {
@@ -308,22 +330,6 @@ function wait_until_in_orbit_of {
         wait until ship:obt:body = dst_body.
         set warp to 0.
   }  
-}
-
-function smooth_pitch {
-  parameter mycourse.
-  parameter old_pitch.
-  parameter new_pitch.
-  parameter t is 15.
-  
-  declare local s is 0.
-  
-  until s > t {
-    lock steering to heading( mycourse, (old_pitch*(t-s)+new_pitch*s)/t ).
-    //print            heading( mycourse, (old_pitch*(t-s)+new_pitch*s)/t ).
-    set s to s+0.1.
-    wait 0.1.
-  }
 }
 
 function set_warp_for_t {
@@ -378,6 +384,13 @@ function pfast {
   set warp to 3.
 }
 
+function pstart {
+  parameter w is 3.
+  set warpmode to "physics".
+  set warp to w.
+
+}
+
 function pstop {
   kuniverse:timewarp:cancelwarp().  
 }
@@ -387,6 +400,7 @@ function pstop {
 declare function set_engine {
   parameter name_str.
   parameter on.
+  parameter s_str is "".
   
   declare local c to 0.
   declare local el to 0.
@@ -398,12 +412,12 @@ declare function set_engine {
     if e:Name:contains(name_str) {
       if on { e:ACTIVATE(). }
       else  { e:SHUTDOWN(). }
+      set c to c+1.
     }
-    set c to c+1.
   }
   if on {set on_str to "on".  }
   else  {set on_str to "off". }
-  print "switched "+c+" engines of type "+name_str+" to "+on_str.
+  print s_str+"switched "+c+" engines of type "+name_str+" to "+on_str.
 }
 
 declare function rapier_air {
@@ -441,9 +455,19 @@ declare function rapier_space {
 
 function myquicksave {
     parameter name.
-    wait until KUniverse:CANQUICKSAVE.
-    KUniverse:QUICKSAVETO(name).
-    print "saving progress: "+name.
+    parameter maxtime is 10.
+
+    local t0 is time:seconds.
+
+    until KUniverse:CANQUICKSAVE OR time:seconds-t0 > maxtime {
+        wait 0.1.
+    }
+    if KUniverse:CANQUICKSAVE {
+        KUniverse:QUICKSAVETO(name).
+        print "saving progress: "+name.
+    } else {
+        print "save failed "+name.
+    }
 }
 
 // Printing/Logging
@@ -476,7 +500,8 @@ function clr_status {
   p_status("",4).
   p_status("",5).
   p_status("",6).
-  p_status("------------------------------",7).
+  p_status("",7).
+  p_status("------------------------------",8).
 }
 
 // Print distance as 10,000km
@@ -515,8 +540,10 @@ function percent {
     local p is abs(a/b)*100.
     if p > 5 {
       return round(p)+"%".
-    } else {
+    } else if p > 1 {
       return round(p,1)+"%".
+    } else {
+      return round(p,3)+"%".
     }  
 }
 
@@ -547,9 +574,12 @@ function myinit {
 
 function myexit {
   lock throttle to 0.0.
+  wait 0.1.
+  SteeringManager:RESETTODEFAULT().
+  SET SHIP:CONTROL:NEUTRALIZE TO TRUE.
+  wait 0.1.
   kuniverse:timewarp:cancelwarp(). 
   wait 0.1.
-  sas on.
 }
 
 function panic {

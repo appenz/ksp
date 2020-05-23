@@ -1,93 +1,84 @@
-// Set inclination to zero.
+//
+// Adjust inclination
+// Currently works for circular orbits only.
+// Tries to correct AP/PE changes.
+// Allows to specify the LAN.
 
-declare parameter incl_new is 0, lan_new is 0.
+parameter incl_new is 0.
+parameter lan_new is ship:orbit:lan.
+parameter wrp is 0.
 
 run once libguido.
+run once libtransfer.
 myinit().
 
-set firsttime to true.
-set done to False.  
+clear_all_nodes().
 
 // Check if there is anything to do.
-
 set i to ship:orbit:inclination - incl_new.
-
-if i > 0 {
-  wait_turn(heading(180,0)).
-  //lock steering to heading(180,0).
-  lock steering to vcrs(ship:velocity:orbit, body:position):direction.
+if abs(i) < 0.01 {
+    print "inclination check passed: "+round(i,3)+" deg  error: "+percent_err(incl_new,ship:orbit:inclination).
+    print "nothing to do.".
 } else {
-  wait_turn(heading(0,0)).
-  //lock steering to heading(0,0).
-  lock steering to vcrs(ship:velocity:orbit, body:position):direction:inverse.
-}
+    print "incl check #1: "+round(i,3)+" deg  error: "+percent_err(incl_new,ship:orbit:inclination).
 
-until done {
+    // calculate angle 
+    set mynode to NODE(time_to_long(lan_new-body:rotationangle)+time:seconds,0,0,0).
+    ADD mynode.
 
-  // calculate angle 
-  if lan_new = 0 {
-    set an_lat to ship:orbit:lan.
-  } else {
-    set an_lat to lan_new.
-  }
-  set warpmode to "rails".
+    set step to 10.
+    set i to 998.
+    set old_i to 999.
+    set d_nor to 0.
 
-  set a to 999.
+    clr_status().
 
-  until a < 2.0 {
+    // Optimize inclination, very normal burn.
+    until step < 0.1 OR i < 0.001 {
+    	set old_i to i.
+    	set mynode:normal to d_nor+step.
+    	if abs(mynode:orbit:inclination-incl_new) < old_i {
+    		set d_nor to d_nor+step.
+    	} else {
+	    	set mynode:normal to d_nor-step.
+	    	if abs(mynode:orbit:inclination-incl_new) < old_i {
+	    		set d_nor to d_nor-step.
+	    	} 
+    	}
+    	set mynode:normal to d_nor.
+    	set i to abs(mynode:orbit:inclination-incl_new).
+    	if i >= old_i {
+    		set step to step/2.
+    	}
+    	p_status("incl : "+round(mynode:orbit:inclination,3)+" / "+round(incl_new,3),0).
+    	p_status("d_nor: "+round(d_nor,1),1).
+    	p_status("step:  "+round(step,2),2).
 
-    set t to a/360*ship:orbit:period.
-
-    set_warp_for_t(t).
-    set ship_lat to mod(longitude+body:rotationangle+720,360).
-    set a to  mod(an_lat-ship_lat+720,360).
-    wait 0.1.
-  }
-
-  set warp to 0.
-  print "AN. lat: "+round(latitude,2)+" incl: "+round(ship:orbit:inclination,3).
-  print "ship lat: "+round(mod(longitude+body:rotationangle+720,360),2).
-  print "LAN  lat: "+an_lat.
-  print1s("incl: "+round(ship:orbit:inclination,3)+" ang: "+round(a,2)).
-
-  set i to abs(ship:orbit:inclination - incl_new).
-  set min_i to 999.
-
-  // Estimate time
-
-  until i < 0 OR mod(a+2,360) > 4 OR abs(i) > (min_i+0.001) {
-    set old_i to i.
-    set i to abs(ship:orbit:inclination - incl_new).
-    set ship_lat to mod(longitude+body:rotationangle+720,360).
-    set a to  mod(an_lat-ship_lat+720,360).
-    
-    // How much throttle?
-    set dv to 2*ship:velocity:orbit:mag*sin(i/2).
-    set dt to abs(dv)/(ship:maxthrust/ship:mass).
-    
-    if dt > 1 {
-        lock throttle to 1.0.
-    } else if dt > 0.1 {
-        lock throttle to 0.1.
-    } else {
-        lock throttle to 0.1.
+        if mynode:deltav:mag > 2000 {
+            panic("Delta V out of range?").
+        }
     }
-    print1s("incl: "+round(ship:orbit:inclination,3)+" ang: "+round(a,2)).
-    wait 0.1.
-    
-    if abs(i) < min_i { set min_i to abs(i). }.
-  } 
-  lock throttle to 0.
 
-  set i to abs(ship:orbit:inclination - incl_new).
-  if i < 0.1 {
-    set done to true.
-  }
-
-  wait 2.
-
+    // Try to fix any periapsis change
+    set d_ap to abs(mynode:orbit:apoapsis-ship:apoapsis).
+    set d_pe to abs(mynode:orbit:periapsis-ship:periapsis).
+    if d_ap > d_pe {
+    	// Looks like the burn changed the Apoapsis, burn node is periapsis. 
+    	set dv2_tar to vv_circular(mynode:orbit:periapsis).
+    	set dv2_act to vv_axis(mynode:orbit:periapsis,(mynode:orbit:apoapsis+mynode:orbit:periapsis)/2+body:radius).
+    	set mynode:prograde to -(dv2_act-dv2_tar).
+    } else {
+    	// Looks like the burn changed the Apoapsis, burn node is periapsis. 
+    	set dv2_tar to vv_circular(mynode:orbit:apoapsis).
+    	set dv2_act to vv_axis(mynode:orbit:apoapsis,(mynode:orbit:apoapsis+mynode:orbit:periapsis)/2+body:radius).
+    	set mynode:prograde to -(dv2_act-dv2_tar).
+    }
 }
 
-set i to abs(ship:orbit:inclination - incl_new).
-print "done. incl: "+round(i,3).
+if hasnode {
+    exec_n(mynode,wrp).
+    set i to ship:orbit:inclination - incl_new.
+    print "incl. check #2: "+round(i,3)+"  error: "+percent_err(incl_new,ship:orbit:inclination).
+}
+
 myexit().

@@ -1,6 +1,8 @@
 // Rendevous with another craft
 
-run once libguido.
+run once libguido.
+run once liborbital.
+
 myinit().
 
 declare parameter dst is vessel("KSS").

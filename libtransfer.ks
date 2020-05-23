@@ -2,18 +2,27 @@
 
 @lazyglobal off.
 run once libguido.
+run once liborbital.
 
 // Pre-calculated transfer table
 // Format is Src, Dst, Altitude/km, Phase Angle, Ejection Angle, Ejection Velocity.
 
 declare global transfer_table to list(
-    list(Kerbin, Duna,   1000,  44.36,  138.75,     2267.83),
+    // Kerbin -----------------------------------------------
     list(Kerbin, Eve,    1000, -54.13,  143.44+180, 2226.01),
+    list(Kerbin, Gilly,  1000, -54.13,  143.44+180, 2226.01),  // Same as Eve
+    list(Kerbin, Duna,   1000,  44.36,  138.75,     2267.83),
     list(Kerbin, Dres,   1000,  82.06,  110.16,     2934.47),
+    list(Kerbin, Jool,   1000,  96.58,  103.61,     3403.72),  // regular
+    list(Kerbin, Jool,   5000,  96.58,  94.64,      2903.80),  // Ion engines
+    // Moons
+    list(Kerbin, Minmus, 1000,    124,  0,          0      ), 
+    // Other Planets
     list(Duna,   Kerbin,  500, -75.19,  110.68+180, 1186.75),
     list(Eve,    Kerbin,  500,  36.07,  159.13,     3754.75),
     list(Dres,   Kerbin,  500,-329.68,  90.77+180,  1589.12)
 ).
+
 
 // Helper functions for PE optimization
 
@@ -126,7 +135,7 @@ function optimize_pe {
     local n_nor to 0.
     local n_rad to 0.
     local n_eta to 0.
-    local step to 20.
+    local step to 10.
     local v to 0.
     
     local pe to calc_pe(mynode,mode).
@@ -201,6 +210,14 @@ function optimize_pe {
 
 }
 
+// Calculate time until a specific longitude on current orbit
+// For now assumes circular orbit
+
+function time_to_long {
+    parameter l.
+    return ship:orbit:period*mod(720+l-longitude,360)/360.
+}
+
 // Access table of transfer values
 
 function get_planet_data {
@@ -215,9 +232,7 @@ function get_planet_data {
     return list(0,0,0).
 }
 
-// Calculate and wait for a transfer window between planets.
-// This won't return until we are there.
-    
+
 function calc_phase_angle {
         parameter src.
         parameter dst.        
@@ -233,8 +248,9 @@ function calc_phase_angle {
 function wait_transfer_window {
 
         declare parameter dst.
+        declare parameter src to ship:orbit:body. 
+        declare parameter warpspeed to 7.
         
-        declare local src to ship:orbit:body. 
         declare local da to calc_phase_angle(src, dst). 
         declare local da_old to da. 
         
@@ -262,9 +278,14 @@ function wait_transfer_window {
                 set da_old to da.
                 set da to calc_phase_angle(src, dst).           
                 p_status("Phase : "+round(da,1),2).
-                p_status("ETA   : "+round((phase_angle-da)/(da-da_old)/10)+" s",3).
-                set warp to 7.
-                wait 10000.
+                p_status("ETA   : "+round(mod(720-phase_angle+da,360)/(da_old-da)/10)+" s",3).
+                set warp to warpspeed.
+                if warpspeed = 7 {wait 10000.}
+                else if warpspeed = 6 {wait 1000.}
+                else if warpspeed = 5 {wait 100.}
+                else if warpspeed = 4 {wait 10.}
+                else {wait 1.}
+                
             }
             set warp to 0. 
         }

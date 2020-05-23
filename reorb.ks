@@ -1,13 +1,16 @@
 // Change Orbit of Current Ship
 
 declare parameter alt_new.
+declare parameter warpspeed is 0.
 
 run once libguido.
+run once libtransfer.
 myinit().
 
 // Check if there is anything to do.
 
-set apo_p to abs( (ship:apoapsis-alt_new)/alt_new). set per_p to abs( (ship:periapsis-alt_new)/alt_new). 
+set apo_p to abs( (ship:apoapsis-alt_new)/alt_new). 
+set per_p to abs( (ship:periapsis-alt_new)/alt_new). 
 
 if apo_p < 0.01 AND per_p < 0.01 {
    print "nothing to do. reorb done.".
@@ -45,12 +48,12 @@ if apo_p < 0.01 AND per_p < 0.01 {
             // Apoapsis maneuver
             set mynode to NODE(time:seconds+eta:apoapsis,0,0,dv_ap).
             ADD mynode.
-            exec_n(mynode).
+            exec_n(mynode, warpspeed).
         } else if t_pe > 60 {
             // Periapsis maneuver
             set mynode to NODE(time:seconds+eta:periapsis,0,0,dv_pe).
             ADD mynode.
-            exec_n(mynode).
+            exec_n(mynode, warpspeed).
         } else {
             print "too close to node, waiting.".
             rwait(60).
