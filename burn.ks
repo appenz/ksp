@@ -1,4 +1,4 @@
-// burn the next maneuver node.
+// burn the next maneuver node
 run once libguido.
 
 parameter wrp is 0.
