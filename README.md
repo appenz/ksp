@@ -1,7 +1,6 @@
-# ksp
-Kerbal KOS Scripts
+# Kerbal Space Program KOS Scripts
 
-Set of scripts to automate Kerbal Space Program
+Set of scripts that automate Kerbal Space Program with the KOS addon allowing for autonomous spacecraft operations.
 - dock.ks - Dock two space crafts in orbit
 - go_*.ks - Calculate and transfers between various planets and moons
 - hit.ks - Land on a specific spot on a planet
